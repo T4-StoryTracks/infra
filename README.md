@@ -16,13 +16,21 @@ Users
 [유저명]
 Add permissions -> Search에 AmazonS3FullAccess를 검색후 추가  
 
-★이거는 EC2올리기위해
+★이거는 EC2올리기위해  
 Policies이동  
 Create policy  
-이름을 정한 후 JSON클릭후 아래를 그대로 복붙후 저장  
+이름을 정한 후(test-policy) JSON클릭후 아래를 그대로 복붙후 저장  
 Users로 이동하여 User name(dev?)를 클릭  
 Add permissions  
 Attach policies directly클릭후 위에서 정한 이름을 검색후 Add permission  
+
+★이거는 RDS올리기위해  
+Policies이동  
+Create policy  
+이름을 정한 후(test-policy-rds) JSON클릭후 아래를 그대로 복붙후 저장  
+Users로 이동하여 User name(dev?)를 클릭  
+Add permissions  
+Attach policies directly클릭후 위에서 정한 이름을 검색후 Add permission
 ```json
 {
     "Version": "2012-10-17",
@@ -63,6 +71,83 @@ Attach policies directly클릭후 위에서 정한 이름을 검색후 Add permi
 }
 ```
 
+★이거는 RDS올리기위해  
+Policies이동  
+Create policy  
+이름을 정한 후(test-policy-rds, test-policy-iam) JSON클릭후 아래를 그대로 복붙후 저장  
+Users로 이동하여 User name(dev?)를 클릭  
+Add permissions  
+Attach policies directly클릭후 위에서 정한 이름을 검색후 Add permission
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateVpc",
+        "ec2:DeleteVpc",
+        "ec2:DescribeVpcs",
+        "ec2:CreateSubnet",
+        "ec2:DeleteSubnet",
+        "ec2:DescribeSubnets",
+        "ec2:CreateInternetGateway",
+        "ec2:AttachInternetGateway",
+        "ec2:DeleteInternetGateway",
+        "ec2:CreateRouteTable",
+        "ec2:AssociateRouteTable",
+        "ec2:DeleteRouteTable",
+        "ec2:CreateRoute",
+        "ec2:ReplaceRoute",
+        "ec2:DescribeVpcAttribute",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeVpcs",
+        "ec2:CreateVpc",
+        "ec2:DeleteVpc",
+        "ec2:DescribeVpcAttribute",
+        "rds:CreateDBSubnetGroup",
+        "rds:DeleteDBSubnetGroup",
+        "rds:DescribeDBSubnetGroups",
+        "rds:ModifyDBSubnetGroup",
+        "rds:AddTagsToResource",
+        "rds:CreateDBSubnetGroup",
+        "rds:DeleteDBSubnetGroup",
+        "rds:DescribeDBSubnetGroups",
+        "rds:ModifyDBSubnetGroup",
+        "rds:ListTagsForResource",
+        "rds:AddTagsToResource",
+        "rds:RemoveTagsFromResource",
+        "rds:CreateDBSubnetGroup",
+        "rds:DeleteDBSubnetGroup",
+        "rds:DescribeDBSubnetGroups",
+        "rds:ListTagsForResource",
+        "rds:CreateDBInstance",
+        "rds:DeleteDBInstance",
+        "rds:DescribeDBInstances",
+        "rds:ModifyDBInstance",
+        "rds:ListTagsForResource",
+        "rds:AddTagsToResource",
+        "rds:RemoveTagsFromResource"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::975050152113:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS"
+    }
+  ]
+}
+```
+
 
 ```bash
 % terraform init
@@ -89,3 +174,6 @@ General purpose buckets->생성된 버킷 확인
 
 EC2이동  
 생성된 인스턴스 확인  
+
+RDS이동  
+생성된 데이터베이스 확인  

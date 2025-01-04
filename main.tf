@@ -52,3 +52,57 @@ resource "aws_security_group" "example" {
     Name = "ExampleSecurityGroup"
   }
 }
+
+# RDS
+resource "aws_db_instance" "example" {
+  allocated_storage    = 20
+  engine               = "mysql"
+  engine_version       = "8.0"
+  instance_class       = "db.t3.micro"
+  db_name              = "mydatabase" # 기본 데이터베이스 이름
+  username             = "admin"      # 마스터 사용자 이름
+  password             = "password1234" # 마스터 비밀번호
+  parameter_group_name = "default.mysql8.0"
+  publicly_accessible  = false
+  skip_final_snapshot  = true
+
+  db_subnet_group_name = aws_db_subnet_group.example.name
+
+  tags = {
+    Name = "MySQL-RDS"
+  }
+}
+
+# RDS가 사용할 서브넷 그룹 생성
+resource "aws_db_subnet_group" "example" {
+  name       = "example-db-subnet-group"
+  subnet_ids = [aws_subnet.example1.id, aws_subnet.example2.id]
+
+  tags = {
+    Name = "MyDBSubnetGroup"
+  }
+}
+
+# 서브넷 예제
+resource "aws_subnet" "example1" {
+  vpc_id                  = aws_vpc.example.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "us-west-2a"
+  map_public_ip_on_launch = false
+}
+
+resource "aws_subnet" "example2" {
+  vpc_id                  = aws_vpc.example.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "us-west-2b"
+  map_public_ip_on_launch = false
+}
+
+# VPC 예제
+resource "aws_vpc" "example" {
+  cidr_block = "10.0.0.0/16"
+
+  tags = {
+    Name = "MyVPC"
+  }
+}
