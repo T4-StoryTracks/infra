@@ -1,5 +1,12 @@
+################################# 백엔드/프런트엔드 공통환경
+
 provider "aws" {
   region = "us-west-2" # 원하는 AWS 리전으로 변경
+}
+
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
 }
 
 # S3
@@ -11,6 +18,8 @@ resource "aws_s3_bucket" "example" {
     Environment = "Dev"
   }
 }
+
+################################# 백엔드 공통환경
 
 # EC2
 resource "aws_instance" "example" {
@@ -104,5 +113,171 @@ resource "aws_vpc" "example" {
 
   tags = {
     Name = "MyVPC"
+  }
+}
+
+################################# 프런트엔드 환경
+
+# S3 버킷 생성
+resource "aws_s3_bucket" "frontend_bucket" {
+  bucket        = "storytracks-fe"
+  force_destroy = true
+
+  tags = {
+    Name        = "FrontendBucket"
+    Environment = "Production"
+  }
+}
+
+resource "aws_s3_bucket_policy" "frontend_bucket_policy" {
+  bucket = aws_s3_bucket.frontend_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::975050152113:user/brad"
+        },
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject"
+        ],
+        Resource = [
+          "${aws_s3_bucket.frontend_bucket.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_s3_bucket_website_configuration" "frontend_website" {
+  bucket = aws_s3_bucket.frontend_bucket.id
+
+  index_document {
+    suffix = "index.html"
+  }
+
+  error_document {
+    key = "error.html"
+  }
+}
+
+/*
+# 2. S3 버킷 정책
+resource "aws_s3_bucket_policy" "frontend_policy" {
+  bucket = aws_s3_bucket.frontend_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.frontend_bucket.arn}/*"
+      }
+    ]
+  })
+}
+*/
+
+# 3. ACM 인증서 생성
+resource "aws_acm_certificate" "cloudfront_cert" {
+  domain_name       = "storytracks.net" # 사용할 도메인 입력
+  validation_method = "DNS"
+  provider          = aws.us_east_1 # CloudFront는 us-east-1 리전을 요구함
+
+  tags = {
+    Name        = "CloudFront SSL Certificate"
+    Environment = "Production"
+  }
+}
+
+/*# 4. DNS 검증용 Route 53 레코드 생성
+resource "aws_route53_record" "cert_validation" {
+  zone_id = "your-route53-zone-id" # Route 53의 Hosted Zone ID 입력
+  name    = aws_acm_certificate.cloudfront_cert.domain_validation_options[0].resource_record_name
+  type    = aws_acm_certificate.cloudfront_cert.domain_validation_options[0].resource_record_type
+  records = [aws_acm_certificate.cloudfront_cert.domain_validation_options[0].resource_record_value]
+  ttl     = 60
+}*/
+
+# 4. DNS 검증을 설정
+resource "aws_route53_record" "cloudfront_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.cloudfront_cert.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  zone_id = "Z0788468O5RUGIE5WVB" # Route 53 호스티드 존 ID
+  name    = each.value.name
+  type    = each.value.type
+  records = [each.value.record]
+  ttl     = 300
+}
+
+# 5. CloudFront 배포
+resource "aws_cloudfront_distribution" "frontend_distribution" {
+  origin {
+    domain_name = aws_s3_bucket.frontend_bucket.bucket_regional_domain_name
+    origin_id   = "S3-Frontend"
+  }
+
+  enabled             = true
+  is_ipv6_enabled     = true
+  default_root_object = "index.html"
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "S3-Frontend"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 3600
+    max_ttl                = 86400
+  }
+
+  viewer_certificate {
+    acm_certificate_arn      = aws_acm_certificate.cloudfront_cert.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  tags = {
+    Name        = "Frontend CloudFront Distribution"
+    Environment = "Production"
+  }
+}
+
+# 6. Route 53 레코드(CNAME)
+resource "aws_route53_record" "cloudfront_alias" {
+  zone_id = "Z0788468O5RUGIE5WVB" # Route 53의 Hosted Zone ID 입력
+  name    = "storytracks.net"      # 연결할 도메인 이름
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.frontend_distribution.domain_name
+    zone_id                = aws_cloudfront_distribution.frontend_distribution.hosted_zone_id
+    evaluate_target_health = false
   }
 }
