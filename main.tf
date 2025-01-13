@@ -223,20 +223,35 @@ resource "aws_route53_record" "cloudfront_cert_validation" {
 }
 
 # 5. CloudFront 배포
+# ACM 인증서 검증 완료 대기 - [3. ACM 인증서 생성]을 하고 바로 하려고해서 arn이 검색이 잘 안되는것 같다.. 이 지점에 도달하면 route 53의 호스트의 CNAME에 acm의 CNAME에 잘 걸려있는것 까지는 확인했는데 cloudfront에서 해당 acm인증서를 적용하는거는 수동으로 해야할듯
+resource "aws_acm_certificate_validation" "cert" {
+  certificate_arn         = aws_acm_certificate.cloudfront_cert.arn
+  validation_record_fqdns = [for record in aws_route53_record.cloudfront_cert_validation : record.fqdn]
+}
+
 resource "aws_cloudfront_distribution" "frontend_distribution" {
   origin {
-    domain_name = aws_s3_bucket.frontend_bucket.bucket_regional_domain_name
-    origin_id   = "S3-Frontend"
+    domain_name = "storytracks-fe.s3.amazonaws.com" # S3 버킷 도메인
+    origin_id   = "S3-storytracks-fe"
+
+    s3_origin_config {
+      origin_access_identity = "origin-access-identity/cloudfront/E3O1ABCD7F1234"
+    }
   }
 
   enabled             = true
   is_ipv6_enabled     = true
+  comment             = "CloudFront for storytracks.net"
   default_root_object = "index.html"
 
+  aliases = ["storytracks.net"] # Custom Domain Name 설정
+
   default_cache_behavior {
-    allowed_methods  = ["GET", "HEAD"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "S3-Frontend"
+    target_origin_id       = "S3-storytracks-fe"
+    viewer_protocol_policy = "redirect-to-https"
+
+    allowed_methods = ["GET", "HEAD", "OPTIONS"]
+    cached_methods  = ["GET", "HEAD"]
 
     forwarded_values {
       query_string = false
@@ -244,17 +259,12 @@ resource "aws_cloudfront_distribution" "frontend_distribution" {
         forward = "none"
       }
     }
-
-    viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = 0
-    default_ttl            = 3600
-    max_ttl                = 86400
   }
 
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate.cloudfront_cert.arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
+    acm_certificate_arn            = aws_acm_certificate_validation.cert.certificate_arn
+    ssl_support_method              = "sni-only"
+    minimum_protocol_version        = "TLSv1.2_2021"
   }
 
   restrictions {
@@ -264,15 +274,15 @@ resource "aws_cloudfront_distribution" "frontend_distribution" {
   }
 
   tags = {
-    Name        = "Frontend CloudFront Distribution"
+    Name        = "storytracks.net"
     Environment = "Production"
   }
 }
 
-# 6. Route 53 레코드(CNAME)
+# Route 53 A 레코드 (Alias)
 resource "aws_route53_record" "cloudfront_alias" {
-  zone_id = "Z0788468O5RUGIE5WVB" # Route 53의 Hosted Zone ID 입력
-  name    = "storytracks.net"      # 연결할 도메인 이름
+  zone_id = "Z0788468O5RUGIE5WVB"
+  name    = "storytracks.net"
   type    = "A"
 
   alias {
@@ -281,3 +291,63 @@ resource "aws_route53_record" "cloudfront_alias" {
     evaluate_target_health = false
   }
 }
+
+# 5. CloudFront 배포
+#resource "aws_cloudfront_distribution" "frontend_distribution" {
+#  origin {
+#    domain_name = aws_s3_bucket.frontend_bucket.bucket_regional_domain_name
+#    origin_id   = "S3-Frontend"
+#  }
+#
+#  enabled             = true
+#  is_ipv6_enabled     = true
+#  default_root_object = "index.html"
+#
+#  default_cache_behavior {
+#    allowed_methods  = ["GET", "HEAD"]
+#    cached_methods   = ["GET", "HEAD"]
+#    target_origin_id = "S3-Frontend"
+#
+#    forwarded_values {
+#      query_string = false
+#      cookies {
+#        forward = "none"
+#      }
+#    }
+#
+#    viewer_protocol_policy = "redirect-to-https"
+#    min_ttl                = 0
+#    default_ttl            = 3600
+#    max_ttl                = 86400
+#  }
+#
+#  viewer_certificate {
+#    acm_certificate_arn      = aws_acm_certificate.cloudfront_cert.arn
+#    ssl_support_method       = "sni-only"
+#    minimum_protocol_version = "TLSv1.2_2021"
+#  }
+#
+#  restrictions {
+#    geo_restriction {
+#      restriction_type = "none"
+#    }
+#  }
+#
+#  tags = {
+#    Name        = "Frontend CloudFront Distribution"
+#    Environment = "Production"
+#  }
+#}
+#
+## 6. Route 53 레코드(CNAME)
+#resource "aws_route53_record" "cloudfront_alias" {
+#  zone_id = "Z0788468O5RUGIE5WVB" # Route 53의 Hosted Zone ID 입력
+#  name    = "storytracks.net"      # 연결할 도메인 이름
+#  type    = "A"
+#
+#  alias {
+#    name                   = aws_cloudfront_distribution.frontend_distribution.domain_name
+#    zone_id                = aws_cloudfront_distribution.frontend_distribution.hosted_zone_id
+#    evaluate_target_health = false
+#  }
+#}
